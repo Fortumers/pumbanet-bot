@@ -1,0 +1,33 @@
+name: Storage integration
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  postgres:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: pumbanet_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U test -d pumbanet_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql+asyncpg://test:test@localhost:5432/pumbanet_test
+      TEST_DATABASE_URL: postgresql+asyncpg://test:test@localhost:5432/pumbanet_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -r requirements-storage.txt
+      - run: python -m compileall -q app migrations tests integration_tests
+      - run: alembic upgrade head
+      - run: alembic check
+      - run: python -m unittest discover -s tests -v
+      - run: python -m unittest discover -s integration_tests -v
+      - run: alembic downgrade base && alembic upgrade head
